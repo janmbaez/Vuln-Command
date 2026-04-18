@@ -23,7 +23,7 @@ function computeKPIs(vulnerabilities: ReturnType<typeof useVulnerabilities>["vul
     ? +(highVulns.reduce((s, v) => s + v.daysOpen, 0) / highVulns.length).toFixed(1)
     : 0;
 
-  const slaMap: Record<string, number> = { Critical: 7, High: 30, Medium: 90, Low: 180 };
+  const slaMap: Record<string, number> = { Critical: 30, High: 60, Medium: 90, Low: 180 };
   const withinSLA = open.filter(v => v.daysOpen <= slaMap[v.severity]).length;
   const slaCompliance = totalOpen > 0 ? +((withinSLA / totalOpen) * 100).toFixed(1) : 100;
 
@@ -82,8 +82,8 @@ export default function Dashboard() {
         <KpiCard
           title="Critical MTTR"
           value={kpis.mttrCritical > 0 ? `${kpis.mttrCritical}d` : "—"}
-          sub={`Target: 7d${kpis.mttrCritical > 0 && kpis.mttrCritical <= 7 ? " ✓" : kpis.mttrCritical > 7 ? " — over SLA" : ""}`}
-          trendPositive={kpis.mttrCritical <= 7 && kpis.mttrCritical > 0}
+          sub={`Target: 30d${kpis.mttrCritical > 0 && kpis.mttrCritical <= 30 ? " ✓" : kpis.mttrCritical > 30 ? " — over SLA" : ""}`}
+          trendPositive={kpis.mttrCritical <= 30 && kpis.mttrCritical > 0}
           icon={Clock}
           color="text-red-500"
         />

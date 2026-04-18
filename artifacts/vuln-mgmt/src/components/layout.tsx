@@ -1,6 +1,6 @@
 import React from "react";
 import { Link, useLocation } from "wouter";
-import { Shield, LayoutDashboard, List, Activity, Target, Layers, Download, UploadCloud } from "lucide-react";
+import { Shield, LayoutDashboard, List, Activity, Target, Layers, Download, UploadCloud, TrendingUp } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const NAV_ITEMS = [
@@ -10,6 +10,7 @@ const NAV_ITEMS = [
   { path: "/risk", label: "Risk Heatmap", icon: Target },
   { path: "/remediation", label: "Remediation Plan", icon: Shield },
   { path: "/assets", label: "Asset Risk Profile", icon: Layers },
+  { path: "/ctem", label: "CTEM Maturity Model", icon: TrendingUp },
 ];
 
 const IMPORT_ITEM = { path: "/import", label: "Import / Add Data", icon: UploadCloud };
@@ -17,7 +18,7 @@ const IMPORT_ITEM = { path: "/import", label: "Import / Add Data", icon: UploadC
 export function Layout({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
 
-  const allItems = [...NAV_ITEMS, IMPORT_ITEM];
+  const allItems = [...NAV_ITEMS, IMPORT_ITEM, { path: "/ctem", label: "CTEM Maturity Model", icon: TrendingUp }];
   const currentLabel = allItems.find(i => i.path === location)?.label || "Dashboard";
 
   return (

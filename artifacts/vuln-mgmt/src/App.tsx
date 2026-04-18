@@ -13,6 +13,7 @@ import Risk from "./pages/risk";
 import Remediation from "./pages/remediation";
 import Assets from "./pages/assets";
 import ImportPage from "./pages/import";
+import CtemPage from "./pages/ctem";
 
 const queryClient = new QueryClient();
 
@@ -26,6 +27,7 @@ function Router() {
       <Route path="/remediation" component={Remediation} />
       <Route path="/assets" component={Assets} />
       <Route path="/import" component={ImportPage} />
+      <Route path="/ctem" component={CtemPage} />
       <Route component={NotFound} />
     </Switch>
   );

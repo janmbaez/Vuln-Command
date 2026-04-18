@@ -98,7 +98,7 @@ function CrowdStrikeImport() {
             <li>Upload the downloaded CSV file below</li>
           </ol>
           <p className="mt-2 text-xs text-blue-400/60">
-            Supported columns: CVE ID, Base Score, Severity, Hostname, Status, Detection Date, Product Name, Platform
+            Expected columns: <strong className="text-blue-300">Hostname, Vulnerability ID, ExPRT rating, Exploit status, Remediation, Status, Days open</strong>
           </p>
         </div>
       </div>
