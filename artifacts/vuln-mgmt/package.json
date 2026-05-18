@@ -72,6 +72,10 @@
     "vaul": "^1.1.2",
     "vite": "catalog:",
     "wouter": "^3.3.5",
-    "zod": "catalog:"
+    "zod": "catalog:",
+    "jspdf": "^2.5.1",
+    "jspdf-autotable": "^3.8.2",
+    "pptxgenjs": "^3.12.0",
+    "xlsx": "^0.18.5"
   }
 }

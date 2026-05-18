@@ -40,15 +40,15 @@ pnpm workspace monorepo using TypeScript. Each package manages its own dependenc
 - `/remediation` — Remediation plan milestones
 - `/assets` — Asset risk profiles
 - `/ctem` — CTEM Maturity Model (5 pillars, self-assessment, radar chart, roadmap)
-- `/import` — CrowdStrike Falcon Spotlight CSV import + manual entry form
+- `/import` — CrowdStrike Falcon Spotlight CSV import workflow + manual entry form
 
 **Key Architecture:**
 - `src/context/VulnerabilityContext.tsx` — Global state with localStorage persistence, CrowdStrike CSV parser, SLA constants exported
-- `src/data/vulnerabilities.ts` — Vulnerability types + 150 real seed records from CrowdStrike Falcon CSV
+- `src/data/vulnerabilities.ts` — Vulnerability types only; no seed vulnerability records are committed
 - `src/data/metrics.ts` — Trend/KPI mock data
 - Dashboard KPIs dynamically computed from context data (not hardcoded)
 - SLA: Critical = 30 days, High = 60 days, Medium = 90 days, Low = 180 days
-- CrowdStrike import maps exact columns: `Hostname`, `Vulnerability ID`, `ExPRT rating`, `Exploit status`, `Remediation`, `Status`, `Days open`
+- CrowdStrike import maps standard Falcon Spotlight export columns without committing sample export data
 - "Reopened" status → "In Progress"; "Days open" format "65 days" parsed to integer
 - CVSS derived from ExPRT rating + Exploit status (no CVSS column in CrowdStrike Spotlight)
 - Team types extended: AppSec, CloudSec, NetSec, EndpointSec, Infrastructure, Database, Messaging

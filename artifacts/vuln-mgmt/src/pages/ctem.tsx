@@ -7,8 +7,90 @@ import {
   ResponsiveContainer, Tooltip,
   BarChart, Bar, XAxis, YAxis, Cell, CartesianGrid,
 } from "recharts";
-import { TrendingUp, Shield, Search, Target, Zap, Users, ChevronRight, Info } from "lucide-react";
+import {
+  Shield, Search, Target, Zap, Users, ChevronRight, Info,
+  Download, FileText, Presentation, FileBarChart2,
+} from "lucide-react";
+// Type-only import — the actual jsPDF/PptxGenJS code is dynamically imported
+// inside handleGenerateReport so the ~600 KB bundle only loads when the user
+// clicks "Generate Report", not when the CTEM page first renders.
+import type { CtemReportData } from "@/lib/generateCtemReport";
 
+const EMPTY_DATA_SCORES: Record<string, number> = {
+  scoping:        1,
+  discovery:      1,
+  prioritization: 1,
+  validation:     1,
+  mobilization:   1,
+};
+
+// ── Strategic roadmap items ───────────────────────────────────────────────────
+const ROADMAP_ITEMS = [
+  {
+    quarter:    "Q2 2026",
+    initiative: "Exploit-Based Prioritization",
+    pillar:     "prioritization",
+    effort:     "High",
+    impact:     "Critical",
+    phase:      "Immediate",
+    detail:     "Deploy ExPRT ratings from CrowdStrike Falcon; stop relying on CVSS alone. Map top-100 CVEs to business-critical assets.",
+  },
+  {
+    quarter:    "Q2 2026",
+    initiative: "SLA Breach Automation",
+    pillar:     "mobilization",
+    effort:     "Medium",
+    impact:     "High",
+    phase:      "Immediate",
+    detail:     "Auto-escalate SLA breaches to team leads via Jira/ServiceNow. Define tier-based ownership with RACI.",
+  },
+  {
+    quarter:    "Q3 2026",
+    initiative: "Continuous Control Validation",
+    pillar:     "validation",
+    effort:     "High",
+    impact:     "High",
+    phase:      "Near-Term",
+    detail:     "Implement breach-and-attack simulation. Add quarterly red-team exercises targeting Priority 1 assets.",
+  },
+  {
+    quarter:    "Q3 2026",
+    initiative: "Cloud Asset Discovery",
+    pillar:     "scoping",
+    effort:     "Medium",
+    impact:     "Medium",
+    phase:      "Near-Term",
+    detail:     "Deploy CSPM tooling for AWS/Azure; auto-tag all cloud resources and feed into vulnerability scanner.",
+  },
+  {
+    quarter:    "Q4 2026",
+    initiative: "Agent-Based Daily Scanning",
+    pillar:     "discovery",
+    effort:     "High",
+    impact:     "High",
+    phase:      "Strategic",
+    detail:     "Roll out sensor agents to all Tier-1 assets for real-time detection; reduce scan latency from 7d to <24h.",
+  },
+] as const;
+
+const PHASE_COLORS: Record<string, string> = {
+  "Immediate": "bg-red-500/15 border-red-500/40 text-red-400",
+  "Near-Term": "bg-amber-500/15 border-amber-500/40 text-amber-400",
+  "Strategic": "bg-blue-500/15 border-blue-500/40 text-blue-400",
+};
+const EFFORT_COLORS: Record<string, string> = {
+  High:   "text-red-400",
+  Medium: "text-amber-400",
+  Low:    "text-green-400",
+};
+const IMPACT_COLORS: Record<string, string> = {
+  Critical: "text-red-400",
+  High:     "text-orange-400",
+  Medium:   "text-amber-400",
+  Low:      "text-green-400",
+};
+
+// ── Pillar metadata ───────────────────────────────────────────────────────────
 const PILLAR_META = [
   {
     key: "scoping",
@@ -114,30 +196,28 @@ const PILLAR_META = [
 
 const MATURITY_LABELS = ["", "Initial", "Developing", "Defined", "Managed", "Optimizing"];
 const MATURITY_COLORS = ["", "#6b7280", "#f59e0b", "#3b82f6", "#10b981", "#6366f1"];
-const MATURITY_BG = ["", "bg-gray-500/10 border-gray-500/30 text-gray-400",
+const MATURITY_BG = [
+  "",
+  "bg-gray-500/10 border-gray-500/30 text-gray-400",
   "bg-amber-500/10 border-amber-500/30 text-amber-400",
   "bg-blue-500/10 border-blue-500/30 text-blue-400",
   "bg-green-500/10 border-green-500/30 text-green-400",
-  "bg-indigo-500/10 border-indigo-500/30 text-indigo-400"];
+  "bg-indigo-500/10 border-indigo-500/30 text-indigo-400",
+];
 
 function computeDataDrivenScores(vulns: ReturnType<typeof useVulnerabilities>["vulnerabilities"]) {
   const total = vulns.length;
-  if (total === 0) return { scoping: 2, discovery: 2, prioritization: 2, validation: 2, mobilization: 2 };
+  if (total === 0) return null;
 
   const open = vulns.filter(v => v.status !== "Resolved" && v.status !== "Risk Accepted");
   const resolved = vulns.filter(v => v.status === "Resolved");
-  const inProgress = vulns.filter(v => v.status === "In Progress");
 
   // Scoping: unique asset count diversity
   const uniqueAssets = new Set(vulns.map(v => v.asset)).size;
-  const scoping = uniqueAssets >= 50 ? 4 : uniqueAssets >= 20 ? 3 : uniqueAssets >= 10 ? 2 : 2;
+  const scoping = uniqueAssets >= 50 ? 4 : uniqueAssets >= 20 ? 3 : 2;
 
   // Discovery: coverage proxy — if we have all severity tiers represented
-  const hasCritical = vulns.some(v => v.severity === "Critical");
-  const hasHigh = vulns.some(v => v.severity === "High");
-  const hasMedium = vulns.some(v => v.severity === "Medium");
-  const hasLow = vulns.some(v => v.severity === "Low");
-  const tierCount = [hasCritical, hasHigh, hasMedium, hasLow].filter(Boolean).length;
+  const tierCount = ["Critical", "High", "Medium", "Low"].filter(s => vulns.some(v => v.severity === s)).length;
   const discovery = tierCount === 4 ? 3 : tierCount === 3 ? 3 : 2;
 
   // Prioritization: % using exploit-status-based scoring
@@ -152,51 +232,106 @@ function computeDataDrivenScores(vulns: ReturnType<typeof useVulnerabilities>["v
   const validation = slaPct >= 0.85 ? 4 : slaPct >= 0.70 ? 3 : slaPct >= 0.50 ? 2 : 1;
 
   // Mobilization: remediation velocity
-  const remPct = (resolved.length + inProgress.length) / total;
+  const remPct = resolved.length / total;
   const mobilization = remPct >= 0.50 ? 3 : remPct >= 0.25 ? 2 : 1;
 
   return { scoping, discovery, prioritization, validation, mobilization };
 }
 
+// ── Sub-components ─────────────────────────────────────────────────────────────
 function ScoreBar({ score, max = 5 }: { score: number; max?: number }) {
+  const pct = Math.min(100, (score / max) * 100);
   return (
-    <div className="flex gap-1 mt-1">
-      {Array.from({ length: max }).map((_, i) => (
-        <div
-          key={i}
-          className={`h-1.5 flex-1 rounded-full transition-colors ${
-            i < score ? "bg-primary" : "bg-muted"
-          }`}
-        />
-      ))}
+    <div className="h-1.5 w-full bg-muted rounded-full mt-1 overflow-hidden">
+      <div className="h-full bg-primary rounded-full transition-all" style={{ width: `${pct}%` }} />
     </div>
   );
 }
 
 function MaturityBadge({ level }: { level: number }) {
+  const idx = Math.min(5, Math.max(1, Math.floor(level + 0.5))); // round to nearest
   return (
-    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${MATURITY_BG[level]}`}>
-      {MATURITY_LABELS[level]}
+    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${MATURITY_BG[idx]}`}>
+      {MATURITY_LABELS[idx]}
     </span>
   );
 }
 
+// ── Main page ──────────────────────────────────────────────────────────────────
 export default function CtemPage() {
   const { vulnerabilities } = useVulnerabilities();
   const derived = useMemo(() => computeDataDrivenScores(vulnerabilities), [vulnerabilities]);
 
-  const [scores, setScores] = useState<Record<string, number>>({
-    scoping: derived.scoping,
-    discovery: derived.discovery,
-    prioritization: derived.prioritization,
-    validation: derived.validation,
-    mobilization: derived.mobilization,
-  });
+  const [scores, setScores] = useState<Record<string, number>>(
+    () => (derived ? { ...derived } : EMPTY_DATA_SCORES),
+  );
+  const [sourceLabel, setSourceLabel] = useState<"derived" | "manual">(derived ? "derived" : "manual");
   const [activeTab, setActiveTab] = useState<string>("scoping");
+  const [isGenerating, setIsGenerating] = useState<"pdf" | "pptx" | "both" | null>(null);
 
   const overallScore = +(Object.values(scores).reduce((a, b) => a + b, 0) / 5).toFixed(1);
-  const overallLabel = overallScore >= 4.5 ? "Optimizing" : overallScore >= 3.5 ? "Managed" : overallScore >= 2.5 ? "Defined" : overallScore >= 1.5 ? "Developing" : "Initial";
-  const overallLevel = Math.round(overallScore);
+  const overallLabel =
+    overallScore >= 4.5 ? "Optimizing"
+    : overallScore >= 3.5 ? "Managed"
+    : overallScore >= 3.0 ? "Defined"
+    : overallScore >= 2.0 ? "Developing"
+    : "Initial";
+  const overallLevel = Math.min(5, Math.max(1, Math.floor(overallScore + 0.5)));
+
+  function handleLoadDerived() {
+    if (!derived) return;
+    setScores(derived as Record<string, number>);
+    setSourceLabel("derived");
+  }
+
+  function handleScoreChange(key: string, val: number) {
+    setScores(prev => ({ ...prev, [key]: +val.toFixed(1) }));
+    setSourceLabel("manual");
+    setActiveTab(key);
+  }
+
+  function buildReportData(): CtemReportData {
+    const open = vulnerabilities.filter(v => v.status !== "Resolved" && v.status !== "Risk Accepted");
+    const critH = open.filter(v => v.severity === "Critical" || v.severity === "High");
+    const withinSLA = critH.filter(v => v.daysOpen <= SLA_DAYS[v.severity]).length;
+    const slaCompliance = critH.length > 0 ? +((withinSLA / critH.length) * 100).toFixed(1) : 100;
+    const resolved = vulnerabilities.filter(v => v.status === "Resolved").length;
+    const remediationRate = vulnerabilities.length > 0 ? +((resolved / vulnerabilities.length) * 100).toFixed(0) : 0;
+
+    return {
+      pillars: PILLAR_META.map(p => ({
+        key: p.key,
+        label: p.label,
+        score: scores[p.key],
+        color: p.color,
+        description: p.description,
+        levels: p.levels,
+        recommendations: p.recommendations,
+      })),
+      overallScore,
+      overallLabel,
+      totalVulnerabilities: vulnerabilities.length,
+      openCritical: open.filter(v => v.severity === "Critical").length,
+      openHigh: open.filter(v => v.severity === "High").length,
+      slaCompliance,
+      remediationRate,
+      generatedAt: new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" }),
+    };
+  }
+
+  async function handleGenerateReport(format: "pdf" | "pptx" | "both") {
+    setIsGenerating(format);
+    try {
+      const data = buildReportData();
+      const { generateCtemPdf, generateCtemPptx } = await import("@/lib/generateCtemReport");
+      if (format === "pdf" || format === "both") generateCtemPdf(data);
+      if (format === "pptx" || format === "both") await generateCtemPptx(data);
+    } catch (err) {
+      console.error("Report generation failed:", err);
+    } finally {
+      setIsGenerating(null);
+    }
+  }
 
   const radarData = PILLAR_META.map(p => ({
     pillar: p.label,
@@ -208,26 +343,101 @@ export default function CtemPage() {
   const barData = PILLAR_META.map(p => ({
     name: p.label,
     current: scores[p.key],
-    gap: 4 - scores[p.key],
+    gap: Math.max(0, 4 - scores[p.key]),
     color: p.color,
   }));
 
   const activePillar = PILLAR_META.find(p => p.key === activeTab)!;
 
+  // Group roadmap by quarter for display
+  const roadmapByQuarter = ROADMAP_ITEMS.reduce<Record<string, typeof ROADMAP_ITEMS[number][]>>((acc, item) => {
+    if (!acc[item.quarter]) acc[item.quarter] = [];
+    acc[item.quarter].push(item);
+    return acc;
+  }, {});
+
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-start justify-between">
-        <div>
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div className="flex-1 min-w-0">
           <h2 className="text-2xl font-bold tracking-tight">CTEM Maturity Model</h2>
           <p className="text-muted-foreground mt-1 text-sm">
             Continuous Threat Exposure Management — assess and advance your organization's maturity across the 5 CTEM pillars.
-            Scores are derived from your vulnerability data and refined via self-assessment below.
           </p>
         </div>
-        <div className={`text-right`}>
-          <div className="text-3xl font-bold text-primary">{overallScore}/5</div>
-          <MaturityBadge level={overallLevel} />
+        <div className="flex items-center gap-3 flex-shrink-0">
+          {/* Score badge */}
+          <div className="text-right">
+            <div className="text-3xl font-bold text-primary">{overallScore}/5</div>
+            <MaturityBadge level={overallLevel} />
+          </div>
+          {/* Generate Report dropdown */}
+          <div className="flex flex-col gap-1.5">
+            <button
+              onClick={() => handleGenerateReport("both")}
+              disabled={isGenerating !== null}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 disabled:opacity-60 transition-colors shadow-sm"
+            >
+              <Download className="h-4 w-4" />
+              {isGenerating === "both" ? "Generating…" : "Generate Report"}
+            </button>
+            <div className="flex gap-1">
+              <button
+                onClick={() => handleGenerateReport("pdf")}
+                disabled={isGenerating !== null}
+                className="flex-1 inline-flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-md bg-card border border-border text-xs font-medium hover:border-primary/50 disabled:opacity-60 transition-colors"
+              >
+                <FileText className="h-3.5 w-3.5 text-red-400" />
+                {isGenerating === "pdf" ? "…" : "PDF only"}
+              </button>
+              <button
+                onClick={() => handleGenerateReport("pptx")}
+                disabled={isGenerating !== null}
+                className="flex-1 inline-flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-md bg-card border border-border text-xs font-medium hover:border-primary/50 disabled:opacity-60 transition-colors"
+              >
+                <Presentation className="h-3.5 w-3.5 text-orange-400" />
+                {isGenerating === "pptx" ? "…" : "PPTX only"}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Source banner */}
+      <div className={`flex items-center justify-between gap-4 px-4 py-2.5 rounded-lg border text-xs ${
+        sourceLabel === "derived"
+          ? "bg-blue-500/10 border-blue-500/30"
+          : "bg-muted/40 border-border"
+      }`}>
+        <div className="flex items-center gap-2">
+          <FileBarChart2 className="h-3.5 w-3.5 text-indigo-400 flex-shrink-0" />
+          {sourceLabel === "derived" && (
+            <span className="text-muted-foreground">
+              Scores computed from your <span className="font-semibold text-foreground">imported vulnerability data</span>. Adjust sliders to refine.
+            </span>
+          )}
+          {sourceLabel === "manual" && (
+            <span className="text-muted-foreground">
+              {derived
+                ? "Scores manually adjusted from imported vulnerability data."
+                : "Import vulnerability data to calculate CTEM scores automatically."}
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          {derived && (
+            <button
+              onClick={handleLoadDerived}
+              className={`px-2.5 py-1 rounded text-xs border transition-colors ${
+                sourceLabel === "derived"
+                  ? "bg-blue-500/20 border-blue-500/40 text-blue-300"
+                  : "border-border text-muted-foreground hover:border-blue-500/40 hover:text-blue-300"
+              }`}
+            >
+              Load from Data
+            </button>
+          )}
         </div>
       </div>
 
@@ -250,7 +460,9 @@ export default function CtemPage() {
                 <Icon className="h-4 w-4" style={{ color: p.color }} />
                 <span className="text-xs font-medium text-muted-foreground">{p.label}</span>
               </div>
-              <div className="text-2xl font-bold mb-1">{score}<span className="text-sm font-normal text-muted-foreground">/5</span></div>
+              <div className="text-2xl font-bold mb-1">
+                {score.toFixed(1)}<span className="text-sm font-normal text-muted-foreground">/5</span>
+              </div>
               <ScoreBar score={score} />
               <div className="mt-2">
                 <MaturityBadge level={score} />
@@ -271,30 +483,10 @@ export default function CtemPage() {
             <ResponsiveContainer width="100%" height={280}>
               <RadarChart data={radarData}>
                 <PolarGrid stroke="#334155" />
-                <PolarAngleAxis
-                  dataKey="pillar"
-                  tick={{ fill: "#94a3b8", fontSize: 12 }}
-                />
-                <PolarRadiusAxis
-                  angle={90}
-                  domain={[0, 5]}
-                  tickCount={6}
-                  tick={{ fill: "#64748b", fontSize: 10 }}
-                />
-                <Radar
-                  name="Target (Level 4)"
-                  dataKey="target"
-                  stroke="#334155"
-                  fill="#334155"
-                  fillOpacity={0.2}
-                />
-                <Radar
-                  name="Current"
-                  dataKey="current"
-                  stroke="#6366f1"
-                  fill="#6366f1"
-                  fillOpacity={0.35}
-                />
+                <PolarAngleAxis dataKey="pillar" tick={{ fill: "#94a3b8", fontSize: 12 }} />
+                <PolarRadiusAxis angle={90} domain={[0, 5]} tickCount={6} tick={{ fill: "#64748b", fontSize: 10 }} />
+                <Radar name="Target (Level 4)" dataKey="target" stroke="#334155" fill="#334155" fillOpacity={0.2} />
+                <Radar name="Current" dataKey="current" stroke="#6366f1" fill="#6366f1" fillOpacity={0.35} />
                 <Tooltip
                   contentStyle={{ background: "#0f172a", border: "1px solid #1e293b", borderRadius: 8, fontSize: 12 }}
                   labelStyle={{ color: "#e2e8f0" }}
@@ -320,6 +512,7 @@ export default function CtemPage() {
                   contentStyle={{ background: "#0f172a", border: "1px solid #1e293b", borderRadius: 8, fontSize: 12 }}
                   labelStyle={{ color: "#e2e8f0" }}
                   itemStyle={{ color: "#94a3b8" }}
+                  formatter={(val: number) => val.toFixed(1)}
                 />
                 <Bar dataKey="current" name="Current" stackId="a" radius={[0, 0, 0, 0]}>
                   {barData.map((entry, idx) => (
@@ -335,12 +528,12 @@ export default function CtemPage() {
 
       {/* Pillar Detail & Self-Assessment */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {/* Left: Pillar selector + self-assessment */}
+        {/* Left: Self-assessment sliders */}
         <Card className="md:col-span-1">
           <CardHeader className="pb-3">
             <CardTitle className="text-sm font-semibold">Self-Assessment</CardTitle>
             <p className="text-xs text-muted-foreground mt-0.5">
-              Adjust each pillar score to reflect your current state. Data-driven estimates are pre-filled.
+              Drag each slider to reflect your current state. Values support decimal precision (0.1 steps).
             </p>
           </CardHeader>
           <CardContent className="space-y-5">
@@ -348,7 +541,8 @@ export default function CtemPage() {
               const Icon = p.icon;
               const score = scores[p.key];
               return (
-                <div key={p.key}
+                <div
+                  key={p.key}
                   className={`rounded-lg p-3 border cursor-pointer transition-all ${
                     activeTab === p.key ? "border-primary/40 bg-primary/5" : "border-border bg-transparent"
                   }`}
@@ -359,27 +553,24 @@ export default function CtemPage() {
                       <Icon className="h-3.5 w-3.5" style={{ color: p.color }} />
                       <span className="text-xs font-medium">{p.label}</span>
                     </div>
-                    <span className="text-xs font-bold">{MATURITY_LABELS[score]}</span>
+                    <span className="text-sm font-bold tabular-nums">{score.toFixed(1)}</span>
                   </div>
-                  <div className="flex items-center gap-2">
-                    {[1, 2, 3, 4, 5].map(lvl => (
-                      <button
-                        key={lvl}
-                        onClick={e => {
-                          e.stopPropagation();
-                          setScores(prev => ({ ...prev, [p.key]: lvl }));
-                          setActiveTab(p.key);
-                        }}
-                        title={MATURITY_LABELS[lvl]}
-                        className={`h-6 w-6 rounded text-xs font-bold transition-all border ${
-                          lvl === score
-                            ? "border-primary bg-primary text-primary-foreground"
-                            : "border-border bg-muted/40 text-muted-foreground hover:border-primary/50"
-                        }`}
-                      >
-                        {lvl}
-                      </button>
-                    ))}
+                  <input
+                    type="range"
+                    min={1}
+                    max={5}
+                    step={0.1}
+                    value={score}
+                    onClick={e => e.stopPropagation()}
+                    onChange={e => handleScoreChange(p.key, parseFloat(e.target.value))}
+                    className="w-full accent-primary h-1.5 cursor-pointer"
+                    style={{ accentColor: p.color }}
+                  />
+                  <div className="flex justify-between text-xs text-muted-foreground/60 mt-0.5 px-0.5">
+                    <span>1</span><span>2</span><span>3</span><span>4</span><span>5</span>
+                  </div>
+                  <div className="mt-1.5">
+                    <MaturityBadge level={score} />
                   </div>
                 </div>
               );
@@ -394,6 +585,9 @@ export default function CtemPage() {
               <activePillar.icon className="h-5 w-5" style={{ color: activePillar.color }} />
               <CardTitle className="text-base font-semibold">{activePillar.label}</CardTitle>
               <MaturityBadge level={scores[activePillar.key]} />
+              <span className="ml-auto text-xs text-muted-foreground tabular-nums font-semibold">
+                {scores[activePillar.key].toFixed(1)} / 5.0
+              </span>
             </div>
             <p className="text-xs text-muted-foreground mt-1">{activePillar.description}</p>
           </CardHeader>
@@ -404,14 +598,12 @@ export default function CtemPage() {
               <div className="space-y-2">
                 {activePillar.levels.map((desc, idx) => {
                   const lvl = idx + 1;
-                  const isCurrent = lvl === scores[activePillar.key];
+                  const isCurrent = Math.floor(scores[activePillar.key] + 0.5) === lvl;
                   return (
                     <div
                       key={lvl}
                       className={`flex gap-3 p-2.5 rounded-lg text-xs transition-colors ${
-                        isCurrent
-                          ? "bg-primary/10 border border-primary/25"
-                          : "border border-transparent"
+                        isCurrent ? "bg-primary/10 border border-primary/25" : "border border-transparent"
                       }`}
                     >
                       <div className={`flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold ${
@@ -421,8 +613,7 @@ export default function CtemPage() {
                       </div>
                       <div>
                         <span className={`font-semibold ${isCurrent ? "text-primary" : "text-muted-foreground"}`}>
-                          {MATURITY_LABELS[lvl]}
-                          {isCurrent && " ← Current"}
+                          {MATURITY_LABELS[lvl]}{isCurrent && " ← Current"}
                         </span>
                         <span className={`ml-1 ${isCurrent ? "text-foreground" : "text-muted-foreground"}`}>
                           — {desc.split(":")[1]?.trim() || desc}
@@ -452,7 +643,7 @@ export default function CtemPage() {
         </Card>
       </div>
 
-      {/* Maturity Roadmap Summary */}
+      {/* Maturity Roadmap Summary Table */}
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-sm font-semibold">CTEM Maturity Roadmap Summary</CardTitle>
@@ -472,7 +663,7 @@ export default function CtemPage() {
               <tbody>
                 {PILLAR_META.map((p, idx) => {
                   const score = scores[p.key];
-                  const gap = 4 - score;
+                  const gap = +(4 - score).toFixed(1);
                   const Icon = p.icon;
                   return (
                     <tr key={p.key} className={`border-b border-border/50 ${idx % 2 === 0 ? "bg-muted/5" : ""}`}>
@@ -484,17 +675,19 @@ export default function CtemPage() {
                       </td>
                       <td className="py-2.5 px-3 text-center">
                         <MaturityBadge level={score} />
+                        <span className="block text-xs text-muted-foreground mt-0.5">{score.toFixed(1)}</span>
                       </td>
                       <td className="py-2.5 px-3 text-center">
                         <MaturityBadge level={4} />
+                        <span className="block text-xs text-muted-foreground mt-0.5">4.0</span>
                       </td>
                       <td className="py-2.5 px-3 text-center">
-                        <span className={`font-bold ${gap === 0 ? "text-green-400" : gap === 1 ? "text-amber-400" : "text-red-400"}`}>
-                          {gap === 0 ? "✓ Met" : `+${gap} level${gap > 1 ? "s" : ""}`}
+                        <span className={`font-bold ${gap <= 0 ? "text-green-400" : gap <= 0.5 ? "text-amber-400" : gap <= 1.5 ? "text-orange-400" : "text-red-400"}`}>
+                          {gap <= 0 ? "✓ Met" : `+${gap}`}
                         </span>
                       </td>
                       <td className="py-2.5 px-3 text-muted-foreground">
-                        {score < 4 ? p.recommendations[0] : "Maintain and optimize current capabilities."}
+                        {gap > 0 ? p.recommendations[0] : "Maintain and optimize current capabilities."}
                       </td>
                     </tr>
                   );
@@ -507,10 +700,104 @@ export default function CtemPage() {
             <Info className="h-4 w-4 text-primary mt-0.5 flex-shrink-0" />
             <div className="text-xs text-muted-foreground">
               <span className="text-foreground font-medium">Overall CTEM Maturity: {overallScore}/5 — {overallLabel}. </span>
-              Scores are pre-computed from your CrowdStrike Falcon Spotlight data and can be refined via self-assessment above.
+              Scores are sourced from imported vulnerability data and can be refined via the sliders above.
               The target level of <strong className="text-foreground">Managed (4)</strong> reflects industry best practice for mature vulnerability management programs.
-              Advancing to <strong className="text-foreground">Optimizing (5)</strong> requires continuous improvement, AI/ML integration, and full SOAR automation.
             </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* ── Strategic Roadmap ────────────────────────────────────────────────── */}
+      <Card>
+        <CardHeader className="pb-3">
+          <div className="flex items-center gap-2">
+            <ChevronRight className="h-4 w-4 text-primary" />
+            <CardTitle className="text-sm font-semibold">Strategic Roadmap to Level 4</CardTitle>
+          </div>
+          <p className="text-xs text-muted-foreground mt-1">
+            Q2–Q4 2026 initiatives required to reach Managed (Level 4) across all CTEM pillars.
+          </p>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-6">
+            {Object.entries(roadmapByQuarter).map(([quarter, items]) => (
+              <div key={quarter}>
+                {/* Quarter header */}
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="h-px flex-1 bg-border" />
+                  <span className="text-xs font-bold text-foreground px-2 py-0.5 rounded bg-muted border border-border">
+                    {quarter}
+                  </span>
+                  <div className="h-px flex-1 bg-border" />
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {items.map((item) => {
+                    const pillarMeta = PILLAR_META.find(p => p.key === item.pillar);
+                    const PillarIcon = pillarMeta?.icon ?? Shield;
+                    return (
+                      <div
+                        key={item.initiative}
+                        className="rounded-lg border border-border bg-card p-4 space-y-3"
+                      >
+                        {/* Top row: title + phase badge */}
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex items-center gap-2">
+                            <PillarIcon
+                              className="h-4 w-4 flex-shrink-0"
+                              style={{ color: pillarMeta?.color ?? "#6366f1" }}
+                            />
+                            <span className="text-sm font-semibold leading-tight">{item.initiative}</span>
+                          </div>
+                          <span className={`flex-shrink-0 text-xs px-2 py-0.5 rounded-full border font-medium ${PHASE_COLORS[item.phase]}`}>
+                            {item.phase}
+                          </span>
+                        </div>
+
+                        {/* Detail */}
+                        <p className="text-xs text-muted-foreground leading-relaxed">{item.detail}</p>
+
+                        {/* Footer: pillar + effort + impact */}
+                        <div className="flex items-center gap-4 text-xs">
+                          <span className="text-muted-foreground">
+                            Pillar:{" "}
+                            <span className="font-medium text-foreground capitalize">{item.pillar}</span>
+                          </span>
+                          <span className="text-muted-foreground">
+                            Effort:{" "}
+                            <span className={`font-medium ${EFFORT_COLORS[item.effort]}`}>{item.effort}</span>
+                          </span>
+                          <span className="text-muted-foreground">
+                            Impact:{" "}
+                            <span className={`font-medium ${IMPACT_COLORS[item.impact]}`}>{item.impact}</span>
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Executive asks from slide 9 */}
+          <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-3">
+            {[
+              { num: "1", title: "Approve Q2 Prioritization Sprint", body: "Authorize the ExPRT integration project and assign 2 FTE from AppSec for a 6-week sprint." },
+              { num: "2", title: "Fund Red Team Program", body: "Allocate budget for quarterly red-team exercises starting Q3 2026 (estimated $85K/year)." },
+              { num: "3", title: "Mandate SLA Accountability", body: "Require team leads to sign off on all Critical SLA breaches within 48 hours via exec dashboard." },
+              { num: "4", title: "30-Day Progress Review", body: "Schedule a leadership checkpoint in 30 days to review closure rates on immediate-phase initiatives." },
+            ].map(ask => (
+              <div key={ask.num} className="flex gap-3 p-3 rounded-lg bg-primary/5 border border-primary/20">
+                <div className="flex-shrink-0 w-6 h-6 rounded-full bg-primary/20 text-primary text-xs font-bold flex items-center justify-center">
+                  {ask.num}
+                </div>
+                <div>
+                  <p className="text-xs font-semibold text-foreground">{ask.title}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">{ask.body}</p>
+                </div>
+              </div>
+            ))}
           </div>
         </CardContent>
       </Card>

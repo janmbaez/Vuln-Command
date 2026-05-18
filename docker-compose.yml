@@ -1,0 +1,32 @@
+services:
+  vuln-command:
+    build:
+      context: .
+      args:
+        BASE_PATH: ${BASE_PATH:-/}
+        VITE_ENABLE_CROWDSTRIKE_LIVE: ${VITE_ENABLE_CROWDSTRIKE_LIVE:-false}
+        VITE_AUTH_ENABLED: ${VITE_AUTH_ENABLED:-true}
+        VITE_AUTH_PASSWORD_HASH: ${VITE_AUTH_PASSWORD_HASH:-b659cbe373e4922849b116d4e3b16db70302f1fec8a9d5ef8c349c1ca686fbda}
+        VITE_AUTH_SALT: ${VITE_AUTH_SALT:-vuln-command-3b3822234d5ea8f0}
+        VITE_AUTH_SESSION_MINUTES: ${VITE_AUTH_SESSION_MINUTES:-30}
+        VITE_AUTH_MAX_ATTEMPTS: ${VITE_AUTH_MAX_ATTEMPTS:-5}
+        VITE_AUTH_LOCKOUT_MINUTES: ${VITE_AUTH_LOCKOUT_MINUTES:-10}
+    image: vuln-command:local
+    ports:
+      - "${APP_PORT:-8080}:8080"
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /var/cache/nginx
+      - /var/run
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/healthz"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 10s

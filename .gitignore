@@ -47,3 +47,20 @@ Thumbs.db
 # Replit
 .cache/
 .local/
+
+# Local/private vulnerability data and generated operational artifacts
+vuln-data.json
+sync-log.jsonl
+attached_assets/*.csv
+*.pptx
+*.pdf
+_tmp_*/
+
+# Local agent / analysis output
+.codex/
+graphify-out/
+
+# Environment files
+.env
+.env.*
+!.env.example
