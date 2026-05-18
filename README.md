@@ -149,7 +149,3 @@ This repo includes `.github/workflows/docker-image.yml`.
 - Pull requests build the Docker image for validation.
 - Pushes to `main` publish the image to GitHub Container Registry as `ghcr.io/<owner>/vuln-command`.
 - The image uses the documented demo login unless `VITE_AUTH_PASSWORD_HASH` and `VITE_AUTH_SALT` secrets are configured.
-
-## LinkedIn Sharing
-
-After GitHub Pages publishes, share the Pages URL on LinkedIn with a short note that this is a sanitized portfolio/demo build. Do not attach real vulnerability reports or customer datasets.
